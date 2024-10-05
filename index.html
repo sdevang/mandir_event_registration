@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Scanner</title>
+    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+</head>
+<body>
+    <h1>QR Code Scanner</h1>
+
+    <!-- Dropdown to select which item is being scanned -->
+    <select id="item-select">
+        <option value="torch_burn_ravan">Torch/Burn Ravan Effigy - Lucky Draw</option>
+        <option value="samosa">Samosa</option>
+        <option value="dabeli">Dabeli</option>
+        <option value="vada_idli_combo">Vada-Idli Combo</option>
+        <option value="photography_consent">Photography Consent</option>
+        <option value="jalebi">Jalebi (3 pcs)</option>
+    </select>
+
+    <div id="reader" style="width:500px"></div>
+    <p id="feedback"></p>
+
+    <script>
+        function onScanSuccess(decodedText) {
+            const selectedItem = document.getElementById('item-select').value;
+
+            // Send the decoded QR code and selected item to the backend
+            fetch('/api/scan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ qrCode: decodedText, item: selectedItem })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Display feedback message based on backend response
+                document.getElementById('feedback').innerText = data.message;
+            })
+            .catch(err => console.log(err));
+        }
+
+        function onScanFailure(error) {
+            console.warn(`QR Code scan error: ${error}`);
+        }
+
+        let html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess, onScanFailure);
+    </script>
+</body>
+</html>

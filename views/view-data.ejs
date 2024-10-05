@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Event Data</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .table th, .table td {
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
+        }
+        .container-fluid {
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid mt-3">
+        <h1 class="text-center mb-4"><i class="fas fa-list-alt"></i> Event Participants and QR Code Management</h1>
+        
+        <!-- Full-width responsive table -->
+        <table class="table table-bordered table-hover table-striped align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Email</th>
+                    <th>First Name</th>
+                    <th>Last Name</th>
+                    <th>Mobile Number</th>
+                    <th>Number of Tickets</th>
+                    <th>Car Parking</th>
+                    <th>Torch/Burn Ravan Effigy</th>
+                    <th>Samosa</th>
+                    <th>Dabeli</th>
+                    <th>Vada-Idli Combo</th>
+                    <th>Jalebi</th>
+                    <th>Car Registration Number</th>
+                    <th>Payable Total</th>
+                    <th>Payable Status</th>
+                    <th>QR Code</th>
+                    <th>QR Code Emailed</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% data.forEach((row) => { %>
+                    <tr>
+                        <td><%= row.id %></td>
+                        <td><%= row.email_address %></td>
+                        <td><%= row.first_name %></td>
+                        <td><%= row.last_name %></td>
+                        <td><%= row.mobile_number %></td>
+                        <td><%= row.number_of_tickets %></td>
+                        <td><%= row.car_parking %></td>
+                        <td><%= row.torch_burn_ravan_effigy %></td>
+                        <td><%= row.samosa %></td>
+                        <td><%= row.dabeli %></td>
+                        <td><%= row.vada_idli_combo %></td>
+                        <td><%= row.jalebi %></td>
+                        <td><%= row.car_registration_number %></td>
+                        <td><%= row.payable_total %></td>
+                        <td>
+                            <span class="badge <%= row.payable_status === 'Paid' ? 'bg-success' : 'bg-danger' %>">
+                                <%= row.payable_status %>
+                            </span>
+                        </td>
+                        <td>
+                            <% if (row.qr_code_url) { %>
+                                <img src="<%= row.qr_code_url %>" alt="QR Code" class="img-thumbnail img-fluid" width="100" height="100">
+                            <% } else { %>
+                                <button class="btn btn-primary btn-sm w-100" id="generate-qr-<%= row.id %>" onclick="generateQRCode(<%= row.id %>)">
+                                    <i class="fas fa-qrcode"></i> Generate QR Code
+                                </button>
+                            <% } %>
+                        </td>
+                        <td>
+                            <% if (row.qr_email_sent) { %>
+                                <span class="badge bg-success"><i class="fas fa-envelope"></i> Sent</span>
+                            <% } else if (row.qr_code_url) { %>
+                                <button class="btn btn-warning btn-sm w-100" id="email-qr-<%= row.id %>" onclick="emailQRCode(<%= row.id %>)">
+                                    <i class="fas fa-paper-plane"></i> Email QR Code
+                                </button>
+                            <% } else { %>
+                                <button class="btn btn-secondary btn-sm w-100" disabled>
+                                    <i class="fas fa-envelope"></i> Email QR Code
+                                </button>
+                            <% } %>
+                        </td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Script to handle QR code generation and email -->
+    <script>
+        function generateQRCode(participationId) {
+            fetch(`/generate-qr/${participationId}`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message === 'QR code generated successfully') {
+                    alert('QR code generated successfully!');
+                    location.reload(); // Reload the page to reflect the QR code generation
+                } else {
+                    alert('Error generating QR code.');
+                }
+            })
+            .catch(error => console.error('Error generating QR code:', error));
+        }
+
+        function emailQRCode(participationId) {
+            fetch(`/email-qr/${participationId}`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message === 'QR code emailed successfully') {
+                    alert('QR code emailed successfully!');
+                    location.reload(); // Reload the page to reflect email status
+                } else {
+                    alert('Error emailing QR code.');
+                }
+            })
+            .catch(error => console.error('Error emailing QR code:', error));
+        }
+    </script>
+
+    <!-- Bootstrap and FontAwesome JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

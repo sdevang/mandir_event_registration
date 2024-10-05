@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Participant Details</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="text-center mb-4"><i class="fas fa-user"></i> Participant Details</h1>
+
+        <div class="card">
+            <div class="card-body">
+                <!-- Participant Info -->
+                <h5 class="card-title"><i class="fas fa-id-badge"></i> <%= data.first_name %> <%= data.last_name %></h5>
+                <p><strong>Email:</strong> <%= data.email_address %></p>
+                <p><strong>Mobile Number:</strong> <%= data.mobile_number %></p>
+                <p><strong>Tickets Purchased:</strong> <%= data.number_of_tickets %></p>
+                <p><strong>Car Parking:</strong> <%= data.car_parking %></p>
+
+                <hr>
+
+                <!-- Conditionally Display Food Collection Section -->
+                <% if (data.samosa_count > 0 || data.dabeli_count > 0 || data.vada_idli_combo_count > 0 || data.jalebi_count > 0) { %>
+                    <h5><i class="fas fa-utensils"></i> Food Items Requested</h5>
+                    <ul class="list-group mb-3">
+                        <li class="list-group-item"><strong>Samosa:</strong> <%= data.samosa_count > 0 ? data.samosa_count + ' Samosas' : 'Not Requested' %></li>
+                        <li class="list-group-item"><strong>Dabeli:</strong> <%= data.dabeli_count > 0 ? data.dabeli_count + ' Dabelis' : 'Not Requested' %></li>
+                        <li class="list-group-item"><strong>Vada-Idli Combo:</strong> <%= data.vada_idli_combo_count > 0 ? data.vada_idli_combo_count + ' Combos' : 'Not Requested' %></li>
+                        <li class="list-group-item"><strong>Jalebi:</strong> <%= data.jalebi_count > 0 ? data.jalebi_count + ' Jalebis' : 'Not Requested' %></li>
+                    </ul>
+
+                    <!-- Food Collection Validation -->
+                    <p>
+                        <strong>Food Collection:</strong> 
+                        <span class="badge <%= data.food_collected ? 'bg-success' : 'bg-danger' %>">
+                            <%= data.food_collected ? 'Collected' : 'Not Collected' %>
+                        </span>
+                        <% if (!data.food_collected) { %>
+                            <button onclick="updateValidation('/update/food/<%= data.id %>')" class="btn btn-sm btn-success mt-2 w-100">
+                                <i class="fas fa-check-circle"></i> Validate Food Collection
+                            </button>
+                        <% } %>
+                    </p>
+
+                    <hr>
+                <% } %>
+
+                <!-- Conditionally Display Parking Validation Section -->
+                <% if (data.car_parking !== 'No Parking - £0' && data.car_parking !== null) { %>
+                    <!-- Parking Validation -->
+                    <p>
+                        <strong>Parking Validation:</strong> 
+                        <span class="badge <%= data.parking_validated ? 'bg-success' : 'bg-danger' %>">
+                            <%= data.parking_validated ? 'Validated' : 'Not Validated' %>
+                        </span>
+                        <% if (!data.parking_validated) { %>
+                            <button onclick="updateValidation('/update/parking/<%= data.id %>')" class="btn btn-sm btn-success mt-2 w-100">
+                                <i class="fas fa-check-circle"></i> Validate Parking
+                            </button>
+                        <% } %>
+                    </p>
+
+                    <hr>
+                <% } %>
+
+                <!-- Entry Validation -->
+                <p>
+                    <strong>Entry Validation:</strong> 
+                    <span class="badge <%= data.entry_validated ? 'bg-success' : 'bg-danger' %>">
+                        <%= data.entry_validated ? 'Validated' : 'Not Validated' %>
+                    </span>
+                    <% if (!data.entry_validated) { %>
+                        <button onclick="updateValidation('/update/entry/<%= data.id %>')" class="btn btn-sm btn-success mt-2 w-100">
+                            <i class="fas fa-check-circle"></i> Validate Entry
+                        </button>
+                    <% } %>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript to update validation status using AJAX -->
+    <script>
+        function updateValidation(url) {
+            fetch(url, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    location.reload(); // Reload the page to reflect the updated validation status
+                })
+                .catch(error => console.error('Error updating validation:', error));
+        }
+    </script>
+
+    <!-- Bootstrap and FontAwesome JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
