@@ -7,33 +7,44 @@ const csv = require('csv-parser');
 const moment = require('moment');
 const path = require('path');
 const qrcode = require('qrcode');
-const nodemailer = require('nodemailer');   
-
-
-// Function to encrypt data
-function encrypt(text) {
-    let cipher = crypto.createCipheriv(algorithm, encryptionKey, iv);
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    return iv.toString('hex') + ':' + encrypted;
-}
-
-// Function to decrypt data
-function decrypt(text) {
-    let parts = text.split(':');
-    let iv = Buffer.from(parts.shift(), 'hex');
-    let encryptedText = Buffer.from(parts.join(':'), 'hex');
-    let decipher = crypto.createDecipheriv(algorithm, encryptionKey, iv);
-    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-}
-
-
+const nodemailer = require('nodemailer');
+const session = require('express-session');
+const flash = require('connect-flash');
+const bcrypt = require('bcrypt');
+const { body, validationResult } = require('express-validator');
 
 // Setup Express
 const app = express();
 app.use(bodyParser.json());
+
+// Session middleware
+app.use(session({
+    secret: process.env.SECRET_KEY || 'SuperSecretKey',  // Use a strong secret in production
+    resave: false,
+    saveUninitialized: true,
+}));
+
+// Flash message middleware
+app.use(flash());
+
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+
+
+// Middleware to make flash messages available in templates
+app.use((req, res, next) => {
+    res.locals.success_msg = req.flash('success_msg');
+    res.locals.error_msg = req.flash('error_msg');
+    next();
+});
+
+// Dummy user database for authentication
+const users = [
+    { username: 'admin', password: '$2b$10$9BEoGEtoF1H3r.YHDQzYxOq8nTCBbopmBApj5Fpxdja9T3XEyQPKa' }  // Hashed password
+];
+
+// Function to find user by username
+const findUserByUsername = (username) => users.find(user => user.username === username);
 
 // PostgreSQL client configuration with SSL
 const clientConfig = {
@@ -47,19 +58,102 @@ const clientConfig = {
     },
 };
 
+// Middleware to protect routes
+function ensureAuthenticated(req, res, next) {
+    if (req.session.user) {
+        console.log("User is authenticated, proceeding to requested route");  // Debugging
+        return next();  // User is authenticated
+    } else {
+        console.log("User not authenticated, redirecting to sign-in");  // Debugging
+        req.flash('error_msg', 'Please sign in to access this page.');
+        return res.redirect('/signin');
+    }
+}
+
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve the upload.html file for the root route (file upload form)
+// Setup template engine
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+// Root route redirects to either main page or sign-in page
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'upload.html')); // Serve the HTML file for uploading
+    if (req.session.user) {
+        res.redirect('/main');  // If authenticated, go to main page
+    } else {
+        res.redirect('/signin');  // Redirect to sign-in page if not authenticated
+    }
 });
 
-// CSV upload endpoint
-app.post('/upload', multer({ dest: 'uploads/' }).single('file'), (req, res) => {
+// Sign-in page route
+app.get('/signin', (req, res) => {
+    res.render('signin');
+});
+
+app.post('/signin', [
+    body('username').notEmpty().withMessage('Username is required'),
+    body('password').notEmpty().withMessage('Password is required')
+], async (req, res) => {
+    const errors = validationResult(req);
+
+    if (!errors.isEmpty()) {
+        req.flash('error_msg', errors.array().map(err => err.msg));
+        return res.redirect('/signin');
+    }
+
+    const { username, password } = req.body;
+    const user = findUserByUsername(username);
+
+    if (!user) {
+        req.flash('error_msg', 'Invalid username or password');
+        return res.redirect('/signin');
+    }
+
+    // Compare password with hashed password
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+        req.flash('error_msg', 'Invalid username or password');
+        return res.redirect('/signin');
+    }
+
+    req.session.user = user;  // Set user in session
+    req.flash('success_msg', 'You are now signed in');
+    return res.redirect('/main');  // Redirect to the main page after login
+});
+
+
+
+// Logout route
+app.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.clearCookie('connect.sid');
+    res.redirect('/signin');
+});
+
+// GET route to render the upload form
+app.get('/upload', ensureAuthenticated, (req, res) => {
+    res.render('upload');  // This will render an upload.ejs form
+});
+
+
+// Main page route (protected)
+app.get('/main', ensureAuthenticated, (req, res) => {
+    res.render('main');
+});
+
+// POST route to handle CSV upload
+app.post('/upload', ensureAuthenticated, multer({ dest: 'uploads/' }).single('file'), (req, res) => {
     const results = [];
 
-    // Read the CSV file line by line and add each row to the results array
+    // Check if file is uploaded
+    if (!req.file) {
+        req.flash('error_msg', 'Please upload a file');
+        return res.redirect('/upload');
+    }
+
+    // Read and process the CSV file
     fs.createReadStream(req.file.path)
         .pipe(csv())
         .on('data', (row) => results.push(row))
@@ -68,23 +162,53 @@ app.post('/upload', multer({ dest: 'uploads/' }).single('file'), (req, res) => {
             try {
                 await client.connect();
 
-                // Process each row sequentially (one by one)
                 for (const row of results) {
-                    await processRow(row, client);  // Wait for each row to be processed
+                    await processRow(row, client);  // Process each row
                 }
 
-                res.json({ message: 'CSV file uploaded and data inserted into the database successfully!' });
+                req.flash('success_msg', 'CSV file uploaded and data inserted successfully!');
+                res.redirect('/upload');
             } catch (error) {
                 console.error('Error inserting data:', error);
-                res.status(500).json({ message: 'Error inserting data into the database.' });
+                req.flash('error_msg', 'Error inserting data into the database.');
+                res.redirect('/upload');
             } finally {
                 await client.end();
-                fs.unlinkSync(req.file.path); // Delete the uploaded CSV file
+                fs.unlinkSync(req.file.path);  // Delete the uploaded file
             }
         });
 });
 
-// Function to process and insert each row into the database
+app.get('/scan-qr-code', ensureAuthenticated, (req, res) => {
+    res.render('scan-qr');
+});
+
+
+// Function to process each row (already implemented by you)
+// ...
+
+// Route to view data (protected)
+app.get('/view-data', ensureAuthenticated, async (req, res) => {
+    const client = new Client(clientConfig);
+    try {
+        await client.connect();
+        const result = await client.query(`
+            SELECT ep.*, qc.qr_code_url, qc.qr_email_sent
+            FROM event_participation ep
+            LEFT JOIN qr_codes qc ON ep.id = qc.event_participation_id
+            ORDER BY ep.id ASC
+        `);
+        const eventData = result.rows;
+        res.render('view-data', { data: eventData });
+    } catch (error) {
+        console.error('Error fetching data:', error);
+        res.status(500).send('Error fetching data from the database.');
+    } finally {
+        await client.end();
+    }
+});
+
+// Function to process a row (already implemented by you)
 async function processRow(row, client) {
     try {
         const timestampValue = row['Timestamp'];
@@ -105,33 +229,32 @@ async function processRow(row, client) {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             RETURNING id`,
             [
-                row['Email address'],                         // Email
-                row['First Name'],                            // First Name
-                row['Last Name'],                             // Last Name
-                row['Mobile Number'],                         // Mobile Number
-                row['Number of Tickets'],                     // Number of Tickets
-                row['Car Parking'],                           // Car Parking
-                row['Torch/Burn Ravan Effigy'],               // Torch/Burn Ravan
-                row['Samosa'],                                // Samosa
-                row['Dabeli'],                                // Dabeli
-                row['Vada-Idli Combo'],                       // Vada-Idli Combo
-                row['Jalebi'],                                // Jalebi
-                row['Car Registration Number'],               // Car Registration
-                row['Payable Total'],                         // Payable Total
-                row['Payable Status']                         // Payable Status
+                row['Email address'],
+                row['First Name'],
+                row['Last Name'],
+                row['Mobile Number'],
+                row['Number of Tickets'],
+                row['Car Parking'],
+                row['Torch/Burn Ravan Effigy'],
+                row['Samosa'],
+                row['Dabeli'],
+                row['Vada-Idli Combo'],
+                row['Jalebi'],
+                row['Car Registration Number'],
+                row['Payable Total'],
+                row['Payable Status']
             ]
         );
 
-        const eventParticipationId = result.rows[0].id;  // Get the inserted row's ID
+        const eventParticipationId = result.rows[0].id;
 
         // Insert into validation_status table
         await client.query(
             `INSERT INTO validation_status (event_participation_id, entry_validated, food_collected, parking_validated) 
             VALUES ($1, $2, $3, $4)`,
-            [eventParticipationId, false, false, false]  // Default validation status to false
+            [eventParticipationId, false, false, false]
         );
 
-        // Log each row in the console
         console.log(`Processed row: ${JSON.stringify(row)}`);
 
     } catch (error) {
@@ -140,56 +263,15 @@ async function processRow(row, client) {
     }
 }
 
-
-app.get('/view-data', async (req, res) => {
-    const client = new Client(clientConfig);
-    try {
-        await client.connect();
-
-        // Fetch all data from event_participation and qr_codes, ordered by id
-        const result = await client.query(`
-            SELECT ep.*, qc.qr_code_url, qc.qr_email_sent
-            FROM event_participation ep
-            LEFT JOIN qr_codes qc ON ep.id = qc.event_participation_id
-            ORDER BY ep.id ASC
-        `);
-
-        const eventData = result.rows;
-
-        // Render the view-data template with the fetched data
-        res.render('view-data', { data: eventData });
-    } catch (error) {
-        console.error('Error fetching data:', error);
-        res.status(500).send('Error fetching data from the database.');
-    } finally {
-        await client.end();
-    }
-});
-
-
-// Decrypt QR code data when accessed
-app.get('/scan-qr/:encryptedData', (req, res) => {
-    const { encryptedData } = req.params;
-
-    try {
-        const decryptedData = decrypt(encryptedData);
-        res.json({ message: 'QR code decrypted successfully', data: decryptedData });
-    } catch (error) {
-        console.error('Error decrypting QR code:', error);
-        res.status(500).json({ message: 'Error decrypting QR code' });
-    }
-});
-
-
-
-app.get('/scan/:id', async (req, res) => {
+// Scan QR code and view data for participant
+app.get('/scan/:id', ensureAuthenticated, async (req, res) => {
     const client = new Client(clientConfig);
     const { id } = req.params;
 
     try {
         await client.connect();
 
-        // Fetch the participant's details, including food items and validation status
+        // Fetch participant details
         const result = await client.query(`
             SELECT ep.*, vs.entry_validated, vs.food_collected, vs.parking_validated
             FROM event_participation ep
@@ -200,7 +282,6 @@ app.get('/scan/:id', async (req, res) => {
         const eventData = result.rows[0];
 
         if (eventData) {
-            // Parse the number of items from the food item columns
             eventData.samosa_count = parseFoodQuantity(eventData.samosa);
             eventData.dabeli_count = parseFoodQuantity(eventData.dabeli);
             eventData.vada_idli_combo_count = parseFoodQuantity(eventData.vada_idli_combo);
@@ -226,27 +307,15 @@ function parseFoodQuantity(foodString) {
     return parseInt(quantity, 10) || 0; // Convert to an integer or return 0 if not a number
 }
 
-
-// Function to parse the quantity of food items from the string (e.g., "2 - £3")
-function parseFoodQuantity(foodString) {
-    if (!foodString) return 0; // If the string is null or undefined
-    const quantity = foodString.split(' - £')[0]; // Extract the part before " - £"
-    return parseInt(quantity, 10) || 0; // Convert to an integer or return 0 if not a number
-}
-
-
-
-
-
 // Route to update parking status
-app.post('/update/parking/:id', async (req, res) => {
+app.post('/update/parking/:id', ensureAuthenticated, async (req, res) => {
     const client = new Client(clientConfig);
     const { id } = req.params;
 
     try {
         await client.connect();
         // Update parking status to TRUE
-        await client.query('UPDATE event_participation SET parking_status = TRUE WHERE id = $1', [id]);
+        await client.query('UPDATE validation_status SET parking_validated = TRUE WHERE event_participation_id = $1', [id]);
         res.json({ message: 'Parking status updated successfully!' });
     } catch (error) {
         console.error('Error updating parking status:', error);
@@ -256,64 +325,52 @@ app.post('/update/parking/:id', async (req, res) => {
     }
 });
 
-app.post('/update/food/:id', async (req, res) => {
+// Route to update food collection status
+app.post('/update/food/:id', ensureAuthenticated, async (req, res) => {
     const client = new Client(clientConfig);
     const { id } = req.params;
 
     try {
         await client.connect();
-
-        // Update the food_collected status in the validation_status table
-        await client.query(
-            `UPDATE validation_status SET food_collected = TRUE WHERE event_participation_id = $1`,
-            [id]
-        );
-
+        // Update food_collected status
+        await client.query('UPDATE validation_status SET food_collected = TRUE WHERE event_participation_id = $1', [id]);
         res.json({ message: 'Food collection validated successfully!' });
     } catch (error) {
-        console.error('Error updating food collection validation:', error);
-        res.status(500).json({ message: 'Error validating food collection' });
+        console.error('Error updating food collection status:', error);
+        res.status(500).json({ message: 'Error updating food collection status.' });
     } finally {
         await client.end();
     }
 });
 
-
-app.post('/update/entry/:id', async (req, res) => {
+// Route to update entry validation status
+app.post('/update/entry/:id', ensureAuthenticated, async (req, res) => {
     const client = new Client(clientConfig);
     const { id } = req.params;
 
     try {
         await client.connect();
-
-        // Update the entry_validated status in the validation_status table
-        await client.query(
-            `UPDATE validation_status SET entry_validated = TRUE WHERE event_participation_id = $1`,
-            [id]
-        );
-
+        // Update entry_validated status
+        await client.query('UPDATE validation_status SET entry_validated = TRUE WHERE event_participation_id = $1', [id]);
         res.json({ message: 'Entry validated successfully!' });
     } catch (error) {
-        console.error('Error updating entry validation:', error);
-        res.status(500).json({ message: 'Error validating entry' });
+        console.error('Error updating entry validation status:', error);
+        res.status(500).json({ message: 'Error updating entry validation status.' });
     } finally {
         await client.end();
     }
 });
 
 // Route to generate and store a QR code for a participant
-app.post('/generate-qr/:id', async (req, res) => {
+app.post('/generate-qr/:id', ensureAuthenticated, async (req, res) => {
     const client = new Client(clientConfig);
     const { id } = req.params;
 
     try {
         await client.connect();
 
-        // Check if the QR code has already been generated
-        const existingQRCode = await client.query(
-            'SELECT * FROM qr_codes WHERE event_participation_id = $1',
-            [id]
-        );
+        // Check if the QR code already exists
+        const existingQRCode = await client.query('SELECT * FROM qr_codes WHERE event_participation_id = $1', [id]);
 
         if (existingQRCode.rows.length > 0) {
             return res.json({ message: 'QR code already exists' });
@@ -324,13 +381,9 @@ app.post('/generate-qr/:id', async (req, res) => {
         const qrCodeData = await qrcode.toDataURL(qrUrl);
 
         // Insert the QR code into the qr_codes table
-        await client.query(
-            `INSERT INTO qr_codes (event_participation_id, qr_code_url) 
-            VALUES ($1, $2)`,
-            [id, qrCodeData]
-        );
+        await client.query('INSERT INTO qr_codes (event_participation_id, qr_code_url) VALUES ($1, $2)', [id, qrCodeData]);
 
-        res.json({ message: 'QR code generated successfully' });
+        res.json({ message: 'QR code generated successfully!' });
     } catch (error) {
         console.error('Error generating QR code:', error);
         res.status(500).json({ message: 'Error generating QR code.' });
@@ -340,77 +393,104 @@ app.post('/generate-qr/:id', async (req, res) => {
 });
 
 
-
-// Setup nodemailer transporter (using a dummy example for Gmail)
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,  // Your email address (e.g., Gmail)
-        pass: process.env.EMAIL_PASSWORD // Your email password
-    }
-});
-
-app.post('/email-qr/:id', async (req, res) => {
+// Route to send the QR code via email as an attachment
+app.post('/email-qr/:id', ensureAuthenticated, async (req, res) => {
     const client = new Client(clientConfig);
     const { id } = req.params;
 
     try {
         await client.connect();
 
-        // Fetch the participant's email and QR code URL
+        // Fetch the participant's email and QR code data
         const result = await client.query(`
-            SELECT ep.email_address, qc.qr_code_url
+            SELECT ep.email_address
             FROM event_participation ep
-            LEFT JOIN qr_codes qc ON ep.id = qc.event_participation_id
             WHERE ep.id = $1
         `, [id]);
 
         const participant = result.rows[0];
 
-        if (!participant || !participant.qr_code_url) {
-            return res.status(404).json({ message: 'QR code not found for this participant' });
+        if (!participant) {
+            await client.end();
+            return res.status(404).json({ message: 'Participant not found' });
         }
 
-        // Send email with the QR code
+        // Get the base URL from the environment variable
+        const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+        const qrUrl = `${baseUrl}/scan/${id}`;
+        const qrCodePath = path.join(__dirname, 'public/qrcodes', `${id}.png`);
+
+        // Generate and save the QR code as a PNG file
+        await qrcode.toFile(qrCodePath, qrUrl);
+
+        // Send email with QR code as an attachment
         const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: participant.email_address,
+            from: process.env.ALERT_EMAIL,
+            to: "dev.rhce@gmail.com",  // Test email
             subject: 'Your Event QR Code',
-            html: `
-                <p>Hello,</p>
-                <p>Here is your event QR code:</p>
-                <img src="${participant.qr_code_url}" alt="QR Code">
-            `
+            text: `Hello, \n\nPlease find your event QR code attached.`,
+            attachments: [
+                {
+                    filename: `${id}-qrcode.png`,
+                    path: qrCodePath,
+                    contentType: 'image/png'
+                }
+            ]
         };
 
         transporter.sendMail(mailOptions, async (error, info) => {
             if (error) {
                 console.error('Error sending email:', error);
+                await client.end();  // Ensure client is closed on error
                 return res.status(500).json({ message: 'Error sending email' });
-            } else {
+            }
+
+            try {
                 // Mark the QR code email as sent in the database
-                await client.query(
-                    `UPDATE qr_codes SET qr_email_sent = TRUE WHERE event_participation_id = $1`,
+                const updateResult = await client.query(
+                    'UPDATE qr_codes SET qr_email_sent = TRUE WHERE event_participation_id = $1',
                     [id]
                 );
 
-                res.json({ message: 'QR code emailed successfully' });
+                // Delete the QR code file after sending
+                fs.unlinkSync(qrCodePath);
+
+                // Success logging and response
+                console.log('QR code emailed successfully, sending success response');
+                return res.json({ message: 'QR code emailed successfully with attachment!' });
+            } catch (dbError) {
+                console.error('Error updating database:', dbError);
+                return res.status(500).json({ message: 'Error updating QR email status in the database.' });
+            } finally {
+                await client.end();  // Ensure client is closed after DB update
             }
         });
 
     } catch (error) {
         console.error('Error emailing QR code:', error);
-        res.status(500).json({ message: 'Error emailing QR code' });
-    } finally {
-        await client.end();
+        await client.end();  // Ensure client is closed on error
+        return res.status(500).json({ message: 'Error emailing QR code.' });
     }
 });
 
 
 
-// Setup template engine
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
+
+
+// Setup nodemailer transporter
+const transporter = nodemailer.createTransport({
+    host: 'smtp.office365.com',
+    port: 587,
+    secure: false, // true for 465, false for other ports
+    auth: {
+        user: process.env.ALERT_EMAIL, // Office365 email
+        pass: process.env.ALERT_EMAIL_PASSWORD       // Office365 password
+    },
+    tls: {
+        ciphers: 'SSLv3'
+    }
+});
+
 
 // Start the server
 app.listen(3000, () => {

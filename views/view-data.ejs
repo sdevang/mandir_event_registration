@@ -21,6 +21,16 @@
     <div class="container-fluid mt-3">
         <h1 class="text-center mb-4"><i class="fas fa-list-alt"></i> Event Participants and QR Code Management</h1>
         
+        <!-- Home Button -->
+        <a href="/main" class="btn btn-primary mb-3">
+            <i class="fas fa-home"></i> Home
+        </a>
+
+        <!-- Search input for filtering by First Name -->
+        <div class="mb-3">
+            <input type="text" id="searchBox" class="form-control" placeholder="Search by First Name">
+        </div>
+
         <!-- Full-width responsive table -->
         <table class="table table-bordered table-hover table-striped align-middle">
             <thead class="table-dark">
@@ -44,7 +54,7 @@
                     <th>QR Code Emailed</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="dataBody">
                 <% data.forEach((row) => { %>
                     <tr>
                         <td><%= row.id %></td>
@@ -96,6 +106,23 @@
 
     <!-- Script to handle QR code generation and email -->
     <script>
+        document.getElementById('searchBox').addEventListener('input', function() {
+            const searchValue = this.value.toLowerCase();
+            const rows = document.querySelectorAll('#dataBody tr');
+
+            rows.forEach(row => {
+                const firstNameCell = row.querySelector('td:nth-child(3)');  // Get the 3rd column (First Name)
+                if (firstNameCell) {
+                    const firstName = firstNameCell.textContent.toLowerCase();
+                    if (firstName.includes(searchValue)) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+            });
+        });
+
         function generateQRCode(participationId) {
             fetch(`/generate-qr/${participationId}`, {
                 method: 'POST'
@@ -104,7 +131,7 @@
             .then(data => {
                 if (data.message === 'QR code generated successfully') {
                     alert('QR code generated successfully!');
-                    location.reload(); // Reload the page to reflect the QR code generation
+                    location.reload();
                 } else {
                     alert('Error generating QR code.');
                 }
@@ -112,20 +139,23 @@
             .catch(error => console.error('Error generating QR code:', error));
         }
 
-        function emailQRCode(participationId) {
-            fetch(`/email-qr/${participationId}`, {
-                method: 'POST'
+        function emailQRCode(id) {
+            fetch(`/email-qr/${id}`, {
+                method: 'POST',
             })
             .then(response => response.json())
             .then(data => {
-                if (data.message === 'QR code emailed successfully') {
-                    alert('QR code emailed successfully!');
-                    location.reload(); // Reload the page to reflect email status
+                if (data.message) {
+                    alert(data.message);
+                    console.log('Success:', data.message);
                 } else {
-                    alert('Error emailing QR code.');
+                    alert('An unexpected error occurred.');
                 }
             })
-            .catch(error => console.error('Error emailing QR code:', error));
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error sending QR code email. Please try again.');
+            });
         }
     </script>
 

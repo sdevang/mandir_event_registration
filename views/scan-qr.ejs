@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan QR Code</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+    <style>
+        #reader {
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">Scan QR Code</h1>
+
+        <!-- Home Button -->
+        <a href="/main" class="btn btn-primary mb-3">
+            <i class="fas fa-home"></i> Home
+        </a>
+
+        <!-- QR code scanner -->
+        <div id="reader"></div>
+
+        <!-- Result container -->
+        <div id="result" class="mt-4 text-center">
+            <p>Scan a QR code to see the result.</p>
+        </div>
+    </div>
+
+    <!-- Include the html5-qrcode library -->
+    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+
+    <script>
+        // Initialize the QR code scanner
+        function onScanSuccess(qrMessage) {
+            // Handle the successful scan of a QR code
+            console.log("QR code scanned: ", qrMessage);
+            document.getElementById('result').innerHTML = `<p class="alert alert-success">QR code scanned: ${qrMessage}</p>`;
+
+            // Redirect to the scanned QR code's URL or process the QR code value
+            window.location.href = qrMessage;  // Assuming the QR code contains a URL
+        }
+
+        function onScanFailure(error) {
+            // Handle scan failure (optional)
+            console.warn("QR code scan failed: ", error);
+        }
+
+        // Initialize the QR code reader with the camera
+        const html5QrCode = new Html5Qrcode("reader");
+
+        // Start scanning with the device's camera
+        html5QrCode.start(
+            { facingMode: { exact: "environment" } },  // Use the back camera
+            {
+                fps: 10,  // Frames per second
+                qrbox: 250  // Display scanning area
+            },
+            onScanSuccess,
+            onScanFailure
+        ).catch(err => {
+            alert("Error accessing the camera: " + err);
+            console.error("Failed to start scanning: ", err);
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
