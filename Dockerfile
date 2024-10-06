@@ -1,5 +1,5 @@
 # Use the official Node.js image as the base image
-FROM --platform=linux/amd64 node:18
+FROM --platform=linux/amd64 node:18-slim
 
 # Set the working directory inside the container
 WORKDIR /usr/src/app
@@ -9,6 +9,8 @@ COPY package*.json ./
 
 # Install dependencies
 RUN npm install
+
+# RUN npm rebuild bcrypt --build-from-source
 
 # Copy the rest of the application code to the working directory
 COPY . .

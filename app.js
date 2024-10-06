@@ -10,12 +10,14 @@ const qrcode = require('qrcode');
 const nodemailer = require('nodemailer');
 const session = require('express-session');
 const flash = require('connect-flash');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 
 // Setup Express
 const app = express();
 app.use(bodyParser.json());
+app.use('/scripts', express.static(path.join(__dirname, 'node_modules/html5-qrcode')));
+
 
 // Session middleware
 app.use(session({
@@ -369,21 +371,27 @@ app.post('/generate-qr/:id', ensureAuthenticated, async (req, res) => {
     try {
         await client.connect();
 
-        // Check if the QR code already exists
-        const existingQRCode = await client.query('SELECT * FROM qr_codes WHERE event_participation_id = $1', [id]);
+        // Check if the QR code has already been generated
+        const existingQRCode = await client.query(
+            'SELECT * FROM qr_codes WHERE event_participation_id = $1',
+            [id]
+        );
 
         if (existingQRCode.rows.length > 0) {
             return res.json({ message: 'QR code already exists' });
         }
 
-        // Generate the QR code URL
-        const qrUrl = `http://localhost:3000/scan/${id}`;
-        const qrCodeData = await qrcode.toDataURL(qrUrl);
+        // Generate the QR code by encoding only the participant's ID
+        const qrCodeData = await qrcode.toDataURL(id.toString());
 
         // Insert the QR code into the qr_codes table
-        await client.query('INSERT INTO qr_codes (event_participation_id, qr_code_url) VALUES ($1, $2)', [id, qrCodeData]);
+        await client.query(
+            `INSERT INTO qr_codes (event_participation_id, qr_code_url) 
+            VALUES ($1, $2)`,
+            [id, qrCodeData]
+        );
 
-        res.json({ message: 'QR code generated successfully!' });
+        res.json({ message: 'QR code generated successfully' });
     } catch (error) {
         console.error('Error generating QR code:', error);
         res.status(500).json({ message: 'Error generating QR code.' });
@@ -415,20 +423,18 @@ app.post('/email-qr/:id', ensureAuthenticated, async (req, res) => {
             return res.status(404).json({ message: 'Participant not found' });
         }
 
-        // Get the base URL from the environment variable
-        const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-        const qrUrl = `${baseUrl}/scan/${id}`;
+        // We are now encoding only the participant's ID in the QR code
         const qrCodePath = path.join(__dirname, 'public/qrcodes', `${id}.png`);
 
-        // Generate and save the QR code as a PNG file
-        await qrcode.toFile(qrCodePath, qrUrl);
+        // Generate and save the QR code as a PNG file with the participant's ID encoded
+        await qrcode.toFile(qrCodePath, id.toString());
 
         // Send email with QR code as an attachment
         const mailOptions = {
             from: process.env.ALERT_EMAIL,
             to: "dev.rhce@gmail.com",  // Test email
             subject: 'Your Event QR Code',
-            text: `Hello, \n\nPlease find your event QR code attached.`,
+            text: `Hello, \n\nPlease find your event QR code attached. This QR code will be scanned at the event to retrieve your details.`,
             attachments: [
                 {
                     filename: `${id}-qrcode.png`,
