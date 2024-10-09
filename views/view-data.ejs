@@ -7,6 +7,9 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
+        body {
+            background-color: #f8f9fa;
+        }
         .table th, .table td {
             white-space: nowrap;
             text-overflow: ellipsis;
@@ -18,6 +21,38 @@
         .btn-group {
             margin-bottom: 15px;
         }
+        h1 {
+            font-size: 2.5rem;
+            color: #343a40;
+        }
+        .table {
+            border-collapse: separate;
+            border-spacing: 0 10px;
+        }
+        .table th {
+            background-color: #343a40;
+            color: #ffffff;
+        }
+        .badge-success {
+            background-color: #28a745;
+        }
+        .badge-danger {
+            background-color: #dc3545;
+        }
+        .badge-warning {
+            background-color: #ffc107;
+        }
+        .table-hover tbody tr:hover {
+            background-color: #f1f3f5;
+        }
+        .btn-custom {
+            font-size: 1rem;
+            padding: 0.75rem 1.5rem;
+        }
+        .search-input {
+            max-width: 300px;
+            margin: 0 auto 15px auto;
+        }
     </style>
 </head>
 <body>
@@ -25,20 +60,23 @@
         <h1 class="text-center mb-4"><i class="fas fa-list-alt"></i> Event Participants and QR Code Management</h1>
         
         <!-- Button group for actions -->
-        <div class="btn-group mb-3">
-            <a href="/main" class="btn btn-primary">
+        <div class="d-flex justify-content-between mb-3">
+            <a href="/main" class="btn btn-primary btn-custom">
                 <i class="fas fa-home"></i> Home
             </a>
-            <button class="btn btn-success" id="generate-all-qrs">
-                <i class="fas fa-qrcode"></i> Generate All QR Codes
-            </button>
-            <button class="btn btn-warning" id="email-all-users">
-                <i class="fas fa-envelope"></i> Email All Users
-            </button>
+            <div class="d-flex">
+                <button class="btn btn-success btn-custom me-2" id="generate-all-qrs">
+                    <i class="fas fa-qrcode"></i> Generate All QR Codes
+                </button>
+                <button class="btn btn-warning btn-custom" id="email-all-users">
+                    <i class="fas fa-envelope"></i> Email All Users
+                </button>
+            </div>
         </div>
 
         <!-- Search input for filtering by First Name -->
-        <div class="mb-3">
+        <div class="input-group mb-3 search-input">
+            <span class="input-group-text" id="basic-addon1"><i class="fas fa-search"></i></span>
             <input type="text" id="searchBox" class="form-control" placeholder="Search by First Name">
         </div>
 
@@ -63,6 +101,7 @@
                     <th>Payable Status</th>
                     <th>QR Code</th>
                     <th>QR Code Emailed</th>
+                    <th>Re-send QR Code</th>
                 </tr>
             </thead>
             <tbody id="dataBody">
@@ -83,7 +122,7 @@
                         <td><%= row.car_registration_number %></td>
                         <td><%= row.payable_total %></td>
                         <td>
-                            <span class="badge <%= row.payable_status === 'Paid' ? 'bg-success' : 'bg-danger' %>">
+                            <span class="badge <%= row.payable_status === 'Paid' ? 'badge-success' : 'badge-danger' %>">
                                 <%= row.payable_status %>
                             </span>
                         </td>
@@ -106,6 +145,17 @@
                             <% } else { %>
                                 <button class="btn btn-secondary btn-sm w-100" disabled>
                                     <i class="fas fa-envelope"></i> Email QR Code
+                                </button>
+                            <% } %>
+                        </td>
+                        <td>
+                            <% if (row.qr_email_sent) { %>
+                                <button class="btn btn-info btn-sm w-100" id="resend-qr-<%= row.id %>" onclick="resendQRCode(<%= row.id %>)">
+                                    <i class="fas fa-sync-alt"></i> Re-send Email
+                                </button>
+                            <% } else { %>
+                                <button class="btn btn-secondary btn-sm w-100" disabled>
+                                    <i class="fas fa-sync-alt"></i> Re-send Email
                                 </button>
                             <% } %>
                         </td>
@@ -170,6 +220,19 @@
                 console.error('Error:', error);
                 alert('Error sending QR code email. Please try again.');
             });
+        }
+
+        // Function to resend QR code email
+        function resendQRCode(id) {
+            fetch(`/resend-qr/${id}`, {
+                method: 'POST',
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                location.reload();
+            })
+            .catch(error => console.error('Error re-sending QR code:', error));
         }
 
         // Button to generate QR codes for all users

@@ -6,6 +6,12 @@
     <title>Participant Details</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .btn-lg {
+            font-size: 1.25rem;
+            padding: 0.75rem 1.5rem;
+        }
+    </style>
 </head>
 <body>
     <div class="container mt-4">
@@ -21,6 +27,39 @@
                 <p><strong>Car Parking:</strong> <%= data.car_parking %></p>
 
                 <hr>
+
+                <!-- Entry Validation -->
+                <p>
+                    <strong>Entry Validation:</strong> 
+                    <span class="badge <%= data.entry_validated ? 'bg-success' : 'bg-danger' %>">
+                        <%= data.entry_validated ? 'Validated' : 'Not Validated' %>
+                    </span>
+                    <% if (!data.entry_validated) { %>
+                        <button onclick="updateValidation('/update/entry/<%= data.id %>')" class="btn btn-lg btn-success mt-2 w-100">
+                            <i class="fas fa-check-circle"></i> Validate Entry
+                        </button>
+                    <% } %>
+                </p>
+
+                <hr>
+
+                <!-- Conditionally Display Parking Validation Section -->
+                <% if (data.car_parking !== 'No Parking - £0' && data.car_parking !== null) { %>
+                    <!-- Parking Validation -->
+                    <p>
+                        <strong>Parking Validation:</strong> 
+                        <span class="badge <%= data.parking_validated ? 'bg-success' : 'bg-danger' %>">
+                            <%= data.parking_validated ? 'Validated' : 'Not Validated' %>
+                        </span>
+                        <% if (!data.parking_validated) { %>
+                            <button onclick="updateValidation('/update/parking/<%= data.id %>')" class="btn btn-lg btn-success mt-2 w-100">
+                                <i class="fas fa-check-circle"></i> Validate Parking
+                            </button>
+                        <% } %>
+                    </p>
+
+                    <hr>
+                <% } %>
 
                 <!-- Conditionally Display Food Collection Section -->
                 <% if (data.samosa_count > 0 || data.dabeli_count > 0 || data.vada_idli_combo_count > 0 || data.jalebi_count > 0) { %>
@@ -39,7 +78,7 @@
                             <%= data.food_collected ? 'Collected' : 'Not Collected' %>
                         </span>
                         <% if (!data.food_collected) { %>
-                            <button onclick="updateValidation('/update/food/<%= data.id %>')" class="btn btn-sm btn-success mt-2 w-100">
+                            <button onclick="updateValidation('/update/food/<%= data.id %>')" class="btn btn-lg btn-success mt-2 w-100">
                                 <i class="fas fa-check-circle"></i> Validate Food Collection
                             </button>
                         <% } %>
@@ -47,48 +86,7 @@
 
                     <hr>
                 <% } %>
-
-                <!-- Conditionally Display Parking Validation Section -->
-                <% if (data.car_parking !== 'No Parking - £0' && data.car_parking !== null) { %>
-                    <!-- Parking Validation -->
-                    <p>
-                        <strong>Parking Validation:</strong> 
-                        <span class="badge <%= data.parking_validated ? 'bg-success' : 'bg-danger' %>">
-                            <%= data.parking_validated ? 'Validated' : 'Not Validated' %>
-                        </span>
-                        <% if (!data.parking_validated) { %>
-                            <button onclick="updateValidation('/update/parking/<%= data.id %>')" class="btn btn-sm btn-success mt-2 w-100">
-                                <i class="fas fa-check-circle"></i> Validate Parking
-                            </button>
-                        <% } %>
-                    </p>
-
-                    <hr>
-                <% } %>
-
-                <!-- Entry Validation -->
-                <p>
-                    <strong>Entry Validation:</strong> 
-                    <span class="badge <%= data.entry_validated ? 'bg-success' : 'bg-danger' %>">
-                        <%= data.entry_validated ? 'Validated' : 'Not Validated' %>
-                    </span>
-                    <% if (!data.entry_validated) { %>
-                        <button onclick="updateValidation('/update/entry/<%= data.id %>')" class="btn btn-sm btn-success mt-2 w-100">
-                            <i class="fas fa-check-circle"></i> Validate Entry
-                        </button>
-                    <% } %>
-                </p>
             </div>
-        </div>
-
-        <!-- Home and Scan Another QR Code Buttons -->
-        <div class="d-flex justify-content-between mt-4">
-            <a href="/main" class="btn btn-secondary">
-                <i class="fas fa-home"></i> Home
-            </a>
-            <a href="/scan-qr-code" class="btn btn-primary">
-                <i class="fas fa-qrcode"></i> Scan Another QR Code
-            </a>
         </div>
     </div>
 
