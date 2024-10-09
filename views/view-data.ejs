@@ -15,16 +15,27 @@
         .container-fluid {
             max-width: 100%;
         }
+        .btn-group {
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
     <div class="container-fluid mt-3">
         <h1 class="text-center mb-4"><i class="fas fa-list-alt"></i> Event Participants and QR Code Management</h1>
         
-        <!-- Home Button -->
-        <a href="/main" class="btn btn-primary mb-3">
-            <i class="fas fa-home"></i> Home
-        </a>
+        <!-- Button group for actions -->
+        <div class="btn-group mb-3">
+            <a href="/main" class="btn btn-primary">
+                <i class="fas fa-home"></i> Home
+            </a>
+            <button class="btn btn-success" id="generate-all-qrs">
+                <i class="fas fa-qrcode"></i> Generate All QR Codes
+            </button>
+            <button class="btn btn-warning" id="email-all-users">
+                <i class="fas fa-envelope"></i> Email All Users
+            </button>
+        </div>
 
         <!-- Search input for filtering by First Name -->
         <div class="mb-3">
@@ -104,8 +115,9 @@
         </table>
     </div>
 
-    <!-- Script to handle QR code generation and email -->
+    <!-- Script to handle search filtering, QR code generation, email sending, and new buttons -->
     <script>
+        // Search filter based on First Name
         document.getElementById('searchBox').addEventListener('input', function() {
             const searchValue = this.value.toLowerCase();
             const rows = document.querySelectorAll('#dataBody tr');
@@ -123,6 +135,7 @@
             });
         });
 
+        // Function to generate QR code for a user
         function generateQRCode(participationId) {
             fetch(`/generate-qr/${participationId}`, {
                 method: 'POST'
@@ -139,6 +152,7 @@
             .catch(error => console.error('Error generating QR code:', error));
         }
 
+        // Function to email QR code to a user
         function emailQRCode(id) {
             fetch(`/email-qr/${id}`, {
                 method: 'POST',
@@ -157,6 +171,37 @@
                 alert('Error sending QR code email. Please try again.');
             });
         }
+
+        // Button to generate QR codes for all users
+        document.getElementById('generate-all-qrs').addEventListener('click', function() {
+            fetch('/generate-all-qrs', {
+                method: 'POST',
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                location.reload();
+            })
+            .catch(error => {
+                console.error('Error generating all QR codes:', error);
+                alert('Error generating all QR codes.');
+            });
+        });
+
+        // Button to email all users with QR codes
+        document.getElementById('email-all-users').addEventListener('click', function() {
+            fetch('/email-all-users', {
+                method: 'POST',
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+            })
+            .catch(error => {
+                console.error('Error emailing all users:', error);
+                alert('Error emailing all users.');
+            });
+        });
     </script>
 
     <!-- Bootstrap and FontAwesome JS -->

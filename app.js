@@ -409,7 +409,7 @@ app.post('/email-qr/:id', ensureAuthenticated, async (req, res) => {
     try {
         await client.connect();
 
-        // Fetch the participant's email and QR code data
+        // Fetch the participant's email
         const result = await client.query(`
             SELECT ep.email_address
             FROM event_participation ep
@@ -423,22 +423,22 @@ app.post('/email-qr/:id', ensureAuthenticated, async (req, res) => {
             return res.status(404).json({ message: 'Participant not found' });
         }
 
-        // We are now encoding only the participant's ID in the QR code
-        const qrCodePath = path.join(__dirname, 'public/qrcodes', `${id}.png`);
+        // Use a simple file name for the QR code image
+        const qrCodePath = path.join(__dirname, 'public/qrcodes', `${id}-qrcode.png`);
 
-        // Generate and save the QR code as a PNG file with the participant's ID encoded
-        await qrcode.toFile(qrCodePath, id.toString());
+        // Generate and save the QR code as a PNG file
+        await qrcode.toFile(qrCodePath, id.toString());  // Using the ID as QR code content
 
         // Send email with QR code as an attachment
         const mailOptions = {
             from: process.env.ALERT_EMAIL,
-            to: "dev.rhce@gmail.com",  // Test email
+            to: participant.email_address,  // Or any test email like "dev.rhce@gmail.com"
             subject: 'Your Event QR Code',
-            text: `Hello, \n\nPlease find your event QR code attached. This QR code will be scanned at the event to retrieve your details.`,
+            text: `Hello, \n\nPlease find your event QR code attached.`,
             attachments: [
                 {
-                    filename: `${id}-qrcode.png`,
-                    path: qrCodePath,
+                    filename: 'qr-code.png',
+                    path: qrCodePath,  // Use the file path
                     contentType: 'image/png'
                 }
             ]
@@ -453,7 +453,7 @@ app.post('/email-qr/:id', ensureAuthenticated, async (req, res) => {
 
             try {
                 // Mark the QR code email as sent in the database
-                const updateResult = await client.query(
+                await client.query(
                     'UPDATE qr_codes SET qr_email_sent = TRUE WHERE event_participation_id = $1',
                     [id]
                 );
@@ -461,8 +461,7 @@ app.post('/email-qr/:id', ensureAuthenticated, async (req, res) => {
                 // Delete the QR code file after sending
                 fs.unlinkSync(qrCodePath);
 
-                // Success logging and response
-                console.log('QR code emailed successfully, sending success response');
+                console.log('QR code emailed successfully');
                 return res.json({ message: 'QR code emailed successfully with attachment!' });
             } catch (dbError) {
                 console.error('Error updating database:', dbError);
@@ -483,6 +482,7 @@ app.post('/email-qr/:id', ensureAuthenticated, async (req, res) => {
 
 
 
+
 // Setup nodemailer transporter
 const transporter = nodemailer.createTransport({
     host: 'smtp.office365.com',
@@ -496,6 +496,126 @@ const transporter = nodemailer.createTransport({
         ciphers: 'SSLv3'
     }
 });
+
+// Route to generate QR codes for all users
+app.post('/generate-all-qrs', ensureAuthenticated, async (req, res) => {
+    const client = new Client(clientConfig);
+    try {
+        await client.connect();
+
+        // Fetch all users from event_participation
+        const result = await client.query('SELECT id FROM event_participation');
+        const users = result.rows;
+
+        for (const user of users) {
+            // Check if the QR code already exists for the user
+            const existingQRCode = await client.query('SELECT * FROM qr_codes WHERE event_participation_id = $1', [user.id]);
+
+            if (existingQRCode.rows.length === 0) {
+                // Generate the QR code and store it in the database
+                const qrCodeData = await qrcode.toDataURL(`${user.id}`);
+                await client.query('INSERT INTO qr_codes (event_participation_id, qr_code_url) VALUES ($1, $2)', [user.id, qrCodeData]);
+            }
+        }
+
+        res.json({ message: 'QR codes generated successfully for all users!' });
+    } catch (error) {
+        console.error('Error generating QR codes for all users:', error);
+        res.status(500).json({ message: 'Error generating QR codes for all users.' });
+    } finally {
+        await client.end();
+    }
+});
+
+
+
+// Helper function to delay execution
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Route to email all users their QR codes with a 5-second delay between each email
+app.post('/email-all-users', ensureAuthenticated, async (req, res) => {
+    const client = new Client(clientConfig);
+
+    try {
+        await client.connect();
+
+        // Fetch all participants who have not been emailed their QR code yet
+        const result = await client.query(`
+            SELECT ep.id, ep.email_address
+            FROM event_participation ep
+            LEFT JOIN qr_codes qc ON ep.id = qc.event_participation_id
+            WHERE qc.qr_email_sent = FALSE OR qc.qr_email_sent IS NULL
+        `);
+
+        const participants = result.rows;
+
+        if (participants.length === 0) {
+            await client.end();
+            return res.status(404).json({ message: 'No participants found to email.' });
+        }
+
+        // Function to delay for a given time (used to add 5-second delay between emails)
+        const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+        // Loop through each participant and email their QR code
+        for (const participant of participants) {
+            const { id, email_address } = participant;
+
+            // Use a simple file name for the QR code image
+            const qrCodePath = path.join(__dirname, 'public/qrcodes', `${id}-qrcode.png`);
+
+            // Generate and save the QR code as a PNG file
+            await qrcode.toFile(qrCodePath, id.toString());  // Using the ID as QR code content
+
+            // Send email with QR code as an attachment
+            const mailOptions = {
+                from: process.env.ALERT_EMAIL,
+                to: email_address,  // Or any test email
+                subject: 'Your Event QR Code',
+                text: `Hello, \n\nPlease find your event QR code attached.`,
+                attachments: [
+                    {
+                        filename: 'qr-code.png',
+                        path: qrCodePath,  // Use the file path
+                        contentType: 'image/png'
+                    }
+                ]
+            };
+
+            transporter.sendMail(mailOptions, async (error, info) => {
+                if (error) {
+                    console.error(`Error sending email to ${email_address}:`, error);
+                } else {
+                    console.log(`QR code emailed successfully to ${email_address}`);
+
+                    // Mark the QR code email as sent in the database
+                    await client.query(
+                        'UPDATE qr_codes SET qr_email_sent = TRUE WHERE event_participation_id = $1',
+                        [id]
+                    );
+
+                    // Delete the QR code file after sending
+                    fs.unlinkSync(qrCodePath);
+                }
+            });
+
+            // Wait for 5 seconds before sending the next email
+            await delay(2000);
+        }
+
+        await client.end();
+        res.json({ message: 'Emails sent successfully to all participants.' });
+
+    } catch (error) {
+        console.error('Error emailing all users:', error);
+        await client.end();
+        res.status(500).json({ message: 'Error emailing users.' });
+    }
+});
+
+
 
 
 // Start the server
