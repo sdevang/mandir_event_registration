@@ -401,7 +401,7 @@ app.post('/generate-qr/:id', ensureAuthenticated, async (req, res) => {
 });
 
 
-// Route to send the QR code via email as an attachment
+// Route to send the QR code via email as an attachment with HTML content
 app.post('/email-qr/:id', ensureAuthenticated, async (req, res) => {
     const client = new Client(clientConfig);
     const { id } = req.params;
@@ -427,14 +427,27 @@ app.post('/email-qr/:id', ensureAuthenticated, async (req, res) => {
         const qrCodePath = path.join(__dirname, 'public/qrcodes', `${id}-qrcode.png`);
 
         // Generate and save the QR code as a PNG file
-        await qrcode.toFile(qrCodePath, id.toString());  // Using the ID as QR code content
+        await qrcode.toFile(qrCodePath, id.toString());
 
-        // Send email with QR code as an attachment
+        // Load the HTML template
+        let htmlTemplate;
+        try {
+            htmlTemplate = fs.readFileSync(path.join(__dirname, 'templates', 'html.html'), 'utf8');
+            console.log('HTML template loaded successfully');
+        } catch (err) {
+            console.error('Error reading HTML template:', err);
+            return res.status(500).json({ message: 'Error reading HTML template.' });
+        }
+
+        // Debug: log the HTML template content (for testing, you can remove this later)
+        console.log('Email body (HTML):', htmlTemplate);
+
+        // Send email with QR code as an attachment and use HTML content
         const mailOptions = {
             from: process.env.ALERT_EMAIL,
             to: participant.email_address,  // Or any test email like "dev.rhce@gmail.com"
             subject: 'Your Event QR Code',
-            text: `Hello, \n\nPlease find your event QR code attached.`,
+            html: htmlTemplate,  // Use the loaded HTML template for the email body
             attachments: [
                 {
                     filename: 'qr-code.png',
@@ -444,6 +457,7 @@ app.post('/email-qr/:id', ensureAuthenticated, async (req, res) => {
             ]
         };
 
+        // Send the email
         transporter.sendMail(mailOptions, async (error, info) => {
             if (error) {
                 console.error('Error sending email:', error);
@@ -477,6 +491,7 @@ app.post('/email-qr/:id', ensureAuthenticated, async (req, res) => {
         return res.status(500).json({ message: 'Error emailing QR code.' });
     }
 });
+
 
 
 
@@ -615,7 +630,7 @@ app.post('/email-all-users', ensureAuthenticated, async (req, res) => {
     }
 });
 
-// Route to re-send the QR code email to a specific user
+
 app.post('/resend-qr/:id', ensureAuthenticated, async (req, res) => {
     const client = new Client(clientConfig);
     const { id } = req.params;
@@ -623,9 +638,9 @@ app.post('/resend-qr/:id', ensureAuthenticated, async (req, res) => {
     try {
         await client.connect();
 
-        // Fetch the participant's email
+        // Fetch the participant's details
         const result = await client.query(`
-            SELECT ep.email_address
+            SELECT ep.first_name, ep.last_name, ep.email_address
             FROM event_participation ep
             WHERE ep.id = $1
         `, [id]);
@@ -633,22 +648,31 @@ app.post('/resend-qr/:id', ensureAuthenticated, async (req, res) => {
         const participant = result.rows[0];
 
         if (!participant) {
-            await client.end();
             return res.status(404).json({ message: 'Participant not found' });
         }
 
-        // Use a simple file name for the QR code image
+        // Generate QR code
         const qrCodePath = path.join(__dirname, 'public/qrcodes', `${id}-qrcode.png`);
+        await qrcode.toFile(qrCodePath, id.toString());  // Using ID as QR code content
 
-        // Generate and save the QR code as a PNG file
-        await qrcode.toFile(qrCodePath, id.toString());
+        // Load the HTML template
+        const htmlFilePath = path.join(__dirname, 'templates/invite.html');
+        let emailHtml = fs.readFileSync(htmlFilePath, 'utf8');
 
-        // Send email with QR code as an attachment
+        // Replace the placeholders in the HTML template
+        emailHtml = emailHtml.replace('SHCS/0001', `SHCS/${id}`);
+        emailHtml = emailHtml.replace('Namaste Sanjeev Bansal ji', `Namaste ${participant.first_name} ${participant.last_name} ji`);
+        emailHtml = emailHtml.replace(
+            'Your Registration',
+            `<small>Your event QR code is attached to this email. Please keep it handy for easy access at the event.</small>`
+        );
+
+        // Prepare the email options
         const mailOptions = {
             from: process.env.ALERT_EMAIL,
-            to: participant.email_address,
-            subject: 'Your Event QR Code',
-            text: `Hello, \n\nPlease find your event QR code attached.`,
+            to: participant.email_address,  // Use participant's email
+            subject: 'Dussehra Mela - 2024 - Sanatan Hindu Cultural Society',
+            html: emailHtml,  // Send the dynamic HTML as the email content
             attachments: [
                 {
                     filename: 'qr-code.png',
@@ -658,39 +682,39 @@ app.post('/resend-qr/:id', ensureAuthenticated, async (req, res) => {
             ]
         };
 
+        // Send the email
         transporter.sendMail(mailOptions, async (error, info) => {
             if (error) {
-                console.error('Error re-sending email:', error);
-                await client.end();
-                return res.status(500).json({ message: 'Error re-sending email' });
+                console.error('Error sending email:', error);
+                return res.status(500).json({ message: 'Error sending email' });
             }
 
             try {
                 // Mark the QR code email as re-sent in the database
                 await client.query(
-                    'UPDATE qr_codes SET qr_email_resent = TRUE WHERE event_participation_id = $1',
+                    'UPDATE qr_codes SET qr_email_sent = TRUE WHERE event_participation_id = $1',
                     [id]
                 );
 
                 // Delete the QR code file after sending
                 fs.unlinkSync(qrCodePath);
 
-                res.json({ message: 'QR code re-sent successfully!' });
+                console.log('QR code re-sent successfully');
+                return res.json({ message: 'QR code re-sent successfully!' });
             } catch (dbError) {
                 console.error('Error updating database:', dbError);
-                res.status(500).json({ message: 'Error updating re-send status in the database.' });
+                return res.status(500).json({ message: 'Error updating QR email status in the database.' });
             } finally {
                 await client.end();
             }
         });
 
     } catch (error) {
-        console.error('Error re-sending QR code:', error);
+        console.error('Error fetching data or sending email:', error);
         await client.end();
-        return res.status(500).json({ message: 'Error re-sending QR code.' });
+        return res.status(500).json({ message: 'Error processing request' });
     }
 });
-
 
 
 
