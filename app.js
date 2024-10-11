@@ -216,13 +216,13 @@ async function processRow(row, client) {
         const timestampValue = row['Timestamp'];
         let convertedTimestamp = null;
 
-        // Validate the timestamp and handle invalid dates
-        if (moment(timestampValue, 'DD/MM/YYYY HH:mm:ss', true).isValid()) {
-            convertedTimestamp = moment(timestampValue, 'DD/MM/YYYY HH:mm:ss').format('YYYY-MM-DD HH:mm:ss');
-        } else {
-            console.warn(`Invalid date format for row: ${JSON.stringify(row)}`);
-            convertedTimestamp = null; // Insert NULL if the date is invalid
-        }
+        // // Validate the timestamp and handle invalid dates
+        // if (moment(timestampValue, 'DD/MM/YYYY HH:mm:ss', true).isValid()) {
+        //     convertedTimestamp = moment(timestampValue, 'DD/MM/YYYY HH:mm:ss').format('YYYY-MM-DD HH:mm:ss');
+        // } else {
+        //     console.warn(`Invalid date format for row: ${JSON.stringify(row)}`);
+        //     convertedTimestamp = null; // Insert NULL if the date is invalid
+        // }
 
         // Insert into event_participation table
         const result = await client.query(
