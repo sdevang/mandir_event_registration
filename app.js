@@ -42,7 +42,17 @@ app.use((req, res, next) => {
 
 // Dummy user database for authentication
 const users = [
-    { username: 'admin', password: '$2b$10$9BEoGEtoF1H3r.YHDQzYxOq8nTCBbopmBApj5Fpxdja9T3XEyQPKa' }  // Hashed password
+    { username: 'admin', password: '$2b$10$9BEoGEtoF1H3r.YHDQzYxOq8nTCBbopmBApj5Fpxdja9T3XEyQPKa' }, 
+    { username: 'schs_user1', password: '$2b$12$PcVT2jyCYUyucWWvbKB/xe0D9PMMAGeLA7HA12Ur.wypppZoA/tge' },
+    { username: 'schs_user2', password: '$2b$12$9UjrCa6wFrwJUlwOv1yuqeixrq8UAtETFqKYfRjXiI2WfSwna2gk6' },
+    { username: 'schs_user3', password: '$2b$12$jLbsuYKMP/TACEd/Lp1QmelnX97aXEI6kY4fuG1zNFnk5ZaMMSSPK' },
+    { username: 'schs_user4', password: '$2b$12$RqWyJUrohXuR.GQw9T5Ozeej7KlmvhM.wV7Cia0bkOn9O/EwqQxsO' },
+    { username: 'schs_user5', password: '$2b$12$XUYT/L1aJ8ThVjoRz7TcnO8m8hEcGBju48z2LMu1Q4XsfUHJBCPnu' },
+    { username: 'schs_user6', password: '$2b$12$LrucKYR7B7mHWxWzjfhK6OWITc2.pOjGPR/G0LN.nvD3ZKWgwxowO' },
+    { username: 'schs_user7', password: '$2b$12$W.mR3upm81GVVtsMP5plh./bBFxDQemDLdL1BTZ8Uxyh4efgtk6GG' },
+    { username: 'schs_user8', password: '$2b$12$WkhbfnHSc85fhI9G6tvSI.ennD6Q3MirJ/M4yEzYeBkFaRdagA2am' },
+    { username: 'schs_user9', password: '$2b$12$yQxhssfByEse4Vdc1xGFLeaMtjMvUwysQjglLUmyZKUA8gAYepNpG' },
+    { username: 'schs_user10', password: '$2b$12$B2KiwElHqryX9Fb00izaFuepggQL919IcxwD4S2TTRQe3rHJa619G' }
 ];
 
 // Function to find user by username
